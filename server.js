@@ -89,6 +89,21 @@ app.get("/api/alerts", async (req, res) => {
     }
 });
 
+app.get("/api/fares", async (req, res) => {
+    try {
+        const url = `${BASE_URL}/Fares/{from}/{to}?key=${METROLINX_KEY}`;
+
+        const response = await axios.get(url);
+
+        res.json(response.data);
+
+    } catch (error) {
+        console.error("Vehicle API error:", error.message);
+        res.status(500).json({
+            error: "Failed to fetch vehicle positions"
+        });
+    }
+});
 // ======================
 // Start server
 // ======================
