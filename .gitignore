@@ -25,4 +25,3 @@ Thumbs.db
 
 # Optional: local testing files
 *.local
-/node_modules/
