@@ -2,78 +2,39 @@ const express = require("express");
 const router = express.Router();
 const metrolinx = require("../services/metrolinx");
 
-router.get("/tripOnDate", async (req, res) => {
-    try {
-        const date = req.query.date || "20260626";
-        const from = req.query.from || "ER";
-        const to = req.query.to || "UN"; || "20260626";
-        const start = req.query.start || "0600";
-        const maxJourney = req.query.maxJourney || "10";
+// ✅ Helper
+function getToday() {
+  const now = new Date();
+  return now.toISOString().slice(0, 10).replace(/-/g, "");
+}
 
-        const data = await metrolinx.getTripOnDate(date, from, to, startTime, maxJourney);
+router.get("/", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const cache = req.cache;
 
-        res.json(data);
-
-    } catch (err) {
-        res.status(500).json({ error: "Schedule API failed" });
+    // ✅ Serve from cache if exists
+    if (cache[date] && cache[date].expiresAt > Date.now()) {
+      console.log("⚡ Cache HIT:", date);
+      return res.json(cache[date].data);
     }
-});
 
-router.get("/journey", async (req, res) => {
-    try {
-        const date = req.query.date || "20260626";
-        const trip = req.query.trip || "2706";
+    console.log("🐢 Cache MISS (should be rare):", date);
 
-        const data = await metrolinx.getScheduleJourney(date, trip);
+    // Fallback (should almost never happen)
+    const data = await metrolinx.getScheduleAllLine(date);
 
-        res.json(data);
+    cache[date] = {
+      data,
+      expiresAt: Date.now() + 24 * 60 * 60 * 1000
+    };
 
-    } catch (err) {
-        res.status(500).json({ error: "Schedule API failed" });
-    }
-});
+    res.json(data);
 
-
-router.get("/allLine", async (req, res) => {
-    try {
-        const date = req.query.date || "20260626";
-
-        const data = await metrolinx.getScheduleAllLine(date);
-
-        res.json(data);
-
-    } catch (err) {
-        res.status(500).json({ error: "Schedule API failed" });
-    }
-});
-
-router.get("/dateLineDirection", async (req, res) => {
-    try {
-        const date = req.query.date || "20260626";
-        const line = req.query.line || "2706";
-        const direction = req.query.direction || "E";
-
-        const data = await metrolinx.getScheduleDateLine(date);
-
-        res.json(data);
-
-    } catch (err) {
-        res.status(500).json({ error: "Schedule API failed" });
-    }
-});
-
-router.get("/dateTrip", async (req, res) => {
-    try {
-        const date = req.query.date || "20260626";
-        const trip = req.query.trip || "2706";
-
-        const data = await metrolinx.getScheduleDateTrip(date);
-
-        res.json(data);
-
-    } catch (err) {
-        res.status(500).json({ error: "Schedule API failed" });
-    }
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ error: "Failed to fetch schedule" });
+  }
 });
 
 module.exports = router;
