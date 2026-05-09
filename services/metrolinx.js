@@ -5,19 +5,19 @@ const KEY = process.env.METROLINX_KEY;
 const BASE_URL = "https://api.openmetrolinx.com/OpenDataAPI/api/V1";
 
 async function getFares(from, to) {
-    const url = `${BASE_URL}/Fares/{from}/{to}?key=${KEY}`;
+    const url = `${BASE_URL}/Fares/${from}/${to}?key=${KEY}`;
     const res = await axios.get(url);
     return res.data;
 }
 
 async function getScheduleTripOnDate(date, from, to, start, maxJourney) {
-    const url = `${BASE_URL}/Schedule/Journey/{date}/{from}/{to}/{start}/{maxJourney}?key=${KEY}`;
+    const url = `${BASE_URL}/Schedule/Journey/${date}/${from}/${to}/${start}/${maxJourney}?key=${KEY}`;
     const res = await axios.get(url);
     return res.data;
 }
 
 async function getScheduleJourney(date, trip) {
-    const url = `${BASE_URL}/Schedule/Trip/{date}/{trip}?key=${KEY}`;
+    const url = `${BASE_URL}/Schedule/Trip/${date}/${trip}?key=${KEY}`;
     const res = await axios.get(url);
     return res.data;
 }
@@ -28,13 +28,13 @@ async function getScheduleAllLine(date) {
 }
 
 async function getScheduleDateLineDirection(date, line, direction) {
-    const url = `${BASE_URL}/Schedule/Line/{date}/{line}/{direction}?key=${KEY}`;
+    const url = `${BASE_URL}/Schedule/Line/${date}/${line}/${direction}?key=${KEY}`;
     const res = await axios.get(url);
     return res.data;
 }
 
 async function getScheduleDateTrip(date, trip) {
-    const url = `${BASE_URL}/Schedule/Trip/{date}/{trip}?key=${KEY}`;
+    const url = `${BASE_URL}/Schedule/Trip/${date}/${trip}?key=${KEY}`;
     const res = await axios.get(url);
     return res.data;
 }
@@ -85,11 +85,11 @@ async function getAllException() {
 
 module.exports = {
     getFares,
-    getTripOnDate,
+    getScheduleTripOnDate,
     getScheduleJourney,
     getScheduleAllLine,
-    getScheduleLineDate,
-    getScheduleTripDate,
+    getScheduleDateLineDirection,
+    getScheduleDateTrip,
     getVehicles,
     getFeedAlerts,
     getFeedTripUpdates,
