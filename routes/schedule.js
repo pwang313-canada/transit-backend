@@ -8,20 +8,21 @@ function getToday() {
   return now.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
+//
+// ✅ 1. SUPER API (your existing one)
+//
 router.get("/", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const cache = req.cache;
 
-    // ✅ Serve from cache if exists
     if (cache[date] && cache[date].expiresAt > Date.now()) {
       console.log("⚡ Cache HIT:", date);
       return res.json(cache[date].data);
     }
 
-    console.log("🐢 Cache MISS (should be rare):", date);
+    console.log("🐢 Cache MISS:", date);
 
-    // Fallback (should almost never happen)
     const data = await metrolinx.getScheduleAllLine(date);
 
     cache[date] = {
@@ -32,8 +33,80 @@ router.get("/", async (req, res) => {
     res.json(data);
 
   } catch (err) {
-    console.error(err);
     res.status(500).json({ error: "Failed to fetch schedule" });
+  }
+});
+
+//
+// ✅ 2. LINE endpoint (from cache 🚀)
+//
+router.get("/line", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const { line, direction } = req.query;
+    const cache = req.cache;
+
+    if (!cache[date]) {
+      return res.status(400).json({ error: "Cache not ready" });
+    }
+
+    const result = cache[date].data.filter(
+      item =>
+        item.LineCode === line &&
+        item.Direction == direction
+    );
+
+    res.json(result);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//
+// ✅ 3. TRIP endpoint (from cache 🚀)
+//
+router.get("/trip", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const { trip } = req.query;
+    const cache = req.cache;
+
+    if (!cache[date]) {
+      return res.status(400).json({ error: "Cache not ready" });
+    }
+
+    const result = cache[date].data.find(
+      item => item.TripNumber == trip
+    );
+
+    res.json(result || {});
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//
+// ✅ 4. JOURNEY endpoint (LIVE API)
+//
+router.get("/journey", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const { from, to, start, maxJourney } = req.query;
+
+    const data = await metrolinx.getScheduleTripOnDate(
+      date,
+      from,
+      to,
+      start,
+      maxJourney
+    );
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
   }
 });
 
