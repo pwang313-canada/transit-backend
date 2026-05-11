@@ -164,7 +164,7 @@ router.get("/date-line-direction", async (req, res) => {
 router.get("/date-date-trip", async (req, res) => {
   try {
     const date = req.query.date || getToday();
-    const { from, to, start, maxJourney } = req.query;
+    const { date, trip } = req.query;
 
     const data = await metrolinx.getScheduleDateTrip(
       date,
