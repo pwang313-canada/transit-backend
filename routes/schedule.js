@@ -113,7 +113,7 @@ router.get("/trip-on-date", async (req, res) => {
 router.get("/date-trip", async (req, res) => {
   try {
     const date = req.query.date || getToday();
-    const { date-trip } = req.query;
+    const { date,trip } = req.query;
 
     const data = await metrolinx.getScheduleDateTrip(
       date,
