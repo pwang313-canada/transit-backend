@@ -16,11 +16,6 @@ async function getScheduleTripOnDate(date, from, to, start, maxJourney) {
     return res.data;
 }
 
-async function getScheduleDateTrip(date, trip) {
-    const url = `${BASE_URL}/Schedule/Trip/${date}/${trip}?key=${KEY}`;
-    const res = await axios.get(url);
-    return res.data;
-}
 async function getScheduleAllLine(date) {
     const url = `${BASE_URL}/Schedule/Line/All/${date}?key=${KEY}`;
     const res = await axios.get(url);
@@ -86,7 +81,6 @@ async function getAllException() {
 module.exports = {
     getFares,
     getScheduleTripOnDate,
-    getScheduleJourney,
     getScheduleAllLine,
     getScheduleDateLineDirection,
     getScheduleDateTrip,
