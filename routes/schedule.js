@@ -113,7 +113,7 @@ router.get("/trip-on-date", async (req, res) => {
 router.get("/date-trip", async (req, res) => {
   try {
     const date = req.query.date || getToday();
-    const { date,trip } = req.query;
+    const { trip } = req.query;
 
     const data = await metrolinx.getScheduleDateTrip(
       date,
@@ -130,7 +130,6 @@ router.get("/date-trip", async (req, res) => {
 router.get("/all-line", async (req, res) => {
   try {
     const date = req.query.date || getToday();
-    const { date } = req.query;
 
     const data = await metrolinx.getScheduleAllLine(
       date
@@ -146,7 +145,7 @@ router.get("/all-line", async (req, res) => {
 router.get("/date-line-direction", async (req, res) => {
   try {
     const date = req.query.date || getToday();
-    const { date, line, direction } = req.query;
+    const { line, direction } = req.query;
 
     const data = await metrolinx.getScheduleDateLineDirection(
       date,
@@ -164,7 +163,7 @@ router.get("/date-line-direction", async (req, res) => {
 router.get("/date-date-trip", async (req, res) => {
   try {
     const date = req.query.date || getToday();
-    const { date, trip } = req.query;
+    const { trip } = req.query;
 
     const data = await metrolinx.getScheduleDateTrip(
       date,
