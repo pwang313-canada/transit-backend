@@ -16,7 +16,7 @@ async function getScheduleTripOnDate(date, from, to, start, maxJourney) {
     return res.data;
 }
 
-async function getScheduleJourney(date, trip) {
+async function getScheduleDateTrip(date, trip) {
     const url = `${BASE_URL}/Schedule/Trip/${date}/${trip}?key=${KEY}`;
     const res = await axios.get(url);
     return res.data;
