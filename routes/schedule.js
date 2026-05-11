@@ -90,7 +90,7 @@ router.get("/trip", async (req, res) => {
 //
 // ✅ 4. JOURNEY endpoint (LIVE API)
 //
-router.get("/journey", async (req, res) => {
+router.get("/scheduleTripOnDate", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const { from, to, start, maxJourney } = req.query;
