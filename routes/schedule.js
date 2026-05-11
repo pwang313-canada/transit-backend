@@ -90,7 +90,7 @@ router.get("/trip", async (req, res) => {
 //
 // ✅ 4. JOURNEY endpoint (LIVE API)
 //
-router.get("/tripOnDate", async (req, res) => {
+router.get("/trip-on-date", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const { from, to, start, maxJourney } = req.query;
@@ -109,5 +109,74 @@ router.get("/tripOnDate", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
+
+router.get("/journey", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const { from, to, start, maxJourney } = req.query;
+
+    const data = await metrolinx.getScheduleJourney(
+      date,
+      trip
+    );
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/all-line", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const { from, to, start, maxJourney } = req.query;
+
+    const data = await metrolinx.getScheduleAllLine(
+      date
+    );
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/date-line-direction", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const { from, to, start, maxJourney } = req.query;
+
+    const data = await metrolinx.getScheduleDateLineDirection(
+      date,
+      line,
+      direction
+    );
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/date-date-trip", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const { from, to, start, maxJourney } = req.query;
+
+    const data = await metrolinx.getScheduleDateTrip(
+      date,
+      trip
+    );
+
+    res.json(data);
+
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
 
 module.exports = router;
