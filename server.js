@@ -1,9 +1,22 @@
 const express = require("express");
 const app = express();
-const scheduleRouter = require("./routes/schedule");
+const scheduleRouter = require("./routers/schedule");
 const serviceUpdateRouter = require("./routers/serviceUpdate");
+const faresRouter = require("./routers/fares");
 
 const PORT = process.env.PORT || 3000;
+
+app.use(express.json());
+
+// ✅ Mount ALL routers FIRST
+app.use("/api/schedule", scheduleRouter);
+app.use("/api/fares", faresRouter);
+app.use("/api/service", serviceUpdateRouter);
+
+// ✅ Root test
+app.get("/", (req, res) => {
+  res.send("API is running");
+});
 
 // ✅ In-memory cache
 const cache = {};
@@ -67,7 +80,6 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use("/schedule", scheduleRouter);
 
 // ✅ Start server + preload
 app.listen(PORT, async () => {
