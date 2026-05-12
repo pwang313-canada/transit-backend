@@ -3,6 +3,7 @@ const app = express();
 const scheduleRouter = require("./routers/schedule");
 const serviceUpdateRouter = require("./routers/serviceUpdate");
 const faresRouter = require("./routers/fares");
+const feedRouter = require("./routers/feed");
 
 const PORT = process.env.PORT || 3000;
 
@@ -12,6 +13,7 @@ app.use(express.json());
 app.use("/api/schedule", scheduleRouter);
 app.use("/api/fares", faresRouter);
 app.use("/api/service", serviceUpdateRouter);
+app.use("/api/feed", feedRouter);
 
 // ✅ Root test
 app.get("/", (req, res) => {

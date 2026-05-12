@@ -16,7 +16,7 @@ router.get("/tripUpdates", async (req, res) => {
         const data = await metrolinx.getAlerts();
         res.json(data);
     } catch (err) {
-        res.status(500).json({ error: "Alerts API failed" });
+        res.status(500).json({ error: "TripUpdates API failed" });
     }
 });
 module.exports = router;
