@@ -13,7 +13,6 @@ if (!API_KEY) {
  */
 async function request(endpoint) {
     const url = `${BASE_URL}${endpoint}?key=${API_KEY}`;
-
     if (!res.ok) {
         const text = await res.text();
         console.error("Metrolinx API error:", text);
@@ -57,25 +56,6 @@ async function getScheduleDateLineDirection({
         `&date=${date}` +
         `&time=${start}` +
         `&maxJourneys=${maxJourney}`;
-
-    return request(endpoint);
-}
-
-//
-// =======================
-// 💰 FARES
-// =======================
-//
-
-async function getFares(from, to) {
-    if (!from || !to) {
-        throw new Error("Missing fare params");
-    }
-
-    const endpoint =
-        `/FareService/fares` +
-        `?from=${from}` +
-        `&to=${to}`;
 
     return request(endpoint);
 }
@@ -133,7 +113,6 @@ async function getScheduleTripOnDate(date, from, to, start, maxJourney) {
 
 async function getScheduleAllLine(date) {
     const url = `${BASE_URL}/Schedule/Line/All/${date}?key=${API_KEY}`;
-    console.log("URL:", url);
     const res = await axios.get(url);
     return res.data;
 }
