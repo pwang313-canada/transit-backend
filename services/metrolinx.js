@@ -1,7 +1,7 @@
 require("dotenv").config();
 const axios = require("axios");
 
-const BASE_URL = "https://api.openmetrolinx.com/OpenDataAPI/api";
+const BASE_URL = "https://api.openmetrolinx.com/OpenDataAPI/api/V1";
 const API_KEY = process.env.METROLINX_KEY;
 
 if (!API_KEY) {
