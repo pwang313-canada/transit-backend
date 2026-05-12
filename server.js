@@ -1,6 +1,8 @@
 const express = require("express");
 const app = express();
 const scheduleRouter = require("./routes/schedule");
+const serviceUpdateRouter = require("./routers/serviceUpdate");
+
 const PORT = process.env.PORT || 3000;
 
 // ✅ In-memory cache

@@ -2,6 +2,42 @@ const express = require("express");
 const router = express.Router();
 const metrolinx = require("../services/metrolinx");
 
+/**
+ * Test route
+ */
+router.get("/test", (req, res) => {
+    res.send("Schedule route works!");
+});
+
+/**
+ * GET /api/schedule/journey
+ * Example:
+ * /api/schedule/journey?from=UN&to=BO&start=0800&date=20260512&maxJourney=3
+ */
+router.get("/journey", async (req, res) => {
+    try {
+        const data = await metrolinx.getScheduleDateLineDirection(req.query);
+        res.json(data);
+    } catch (err) {
+        console.error("Journey error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+/**
+ * GET /api/schedule/lines
+ */
+router.get("/lines", async (req, res) => {
+    try {
+        const data = await metrolinx.getScheduleAllLine();
+        res.json(data);
+    } catch (err) {
+        console.error("Lines error:", err.message);
+        res.status(500).json({ error: err.message });
+    }
+});
+
+
 // ✅ Helper
 function getToday() {
   const now = new Date();
@@ -177,5 +213,98 @@ router.get("/date-date-trip", async (req, res) => {
   }
 });
 
+
+router.get("/service-alert", async (req, res) => {
+  try {
+    console.log("🚨 SERVICE ALERT HIT");
+
+    const data = await metrolinx.getServiceAlert();
+
+    res.json(data);
+
+  } catch (err) {
+    console.error("❌ SERVICE ALERT ERROR:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
+
+//
+// ✅ SUPER API (ALL-IN-ONE)
+//
+router.get("/super", async (req, res) => {
+  try {
+    const date = req.query.date || getToday();
+    const cache = req.cache;
+
+    console.log("🚀 SUPER API HIT:", date);
+
+    // ✅ 1. Schedule (use cache)
+    let scheduleData;
+
+    if (cache[date] && cache[date].expiresAt > Date.now()) {
+      console.log("⚡ schedule cache HIT");
+      scheduleData = cache[date].data;
+    } else {
+      console.log("🐢 schedule fetch");
+      scheduleData = await metrolinx.getScheduleAllLine(date);
+
+      cache[date] = {
+        data: scheduleData,
+        expiresAt: Date.now() + 24 * 60 * 60 * 1000
+      };
+    }
+
+    // ✅ 2. Service Alerts (short cache)
+    let alertsData;
+    const ALERT_KEY = "service-alert";
+
+    if (
+      cache[ALERT_KEY] &&
+      cache[ALERT_KEY].expiresAt > Date.now()
+    ) {
+      console.log("⚡ alert cache HIT");
+      alertsData = cache[ALERT_KEY].data;
+    } else {
+      console.log("🐢 alert fetch");
+      alertsData = await metrolinx.getServiceAlert();
+
+      cache[ALERT_KEY] = {
+        data: alertsData,
+        expiresAt: Date.now() + 60 * 1000
+      };
+    }
+
+    // ✅ 3. Vehicles (optional, real-time)
+    let vehicleData;
+    const VEHICLE_KEY = "vehicles";
+
+    if (
+      cache[VEHICLE_KEY] &&
+      cache[VEHICLE_KEY].expiresAt > Date.now()
+    ) {
+      vehicleData = cache[VEHICLE_KEY].data;
+    } else {
+      vehicleData = await metrolinx.getVehicles();
+
+      cache[VEHICLE_KEY] = {
+        data: vehicleData,
+        expiresAt: Date.now() + 30 * 1000 // 30 sec cache
+      };
+    }
+
+    // ✅ Final response
+    res.json({
+      date,
+      schedule: scheduleData,
+      serviceAlerts: alertsData,
+      vehicles: vehicleData,
+      lastUpdated: Date.now()
+    });
+
+  } catch (err) {
+    console.error("❌ SUPER API ERROR:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 module.exports = router;
