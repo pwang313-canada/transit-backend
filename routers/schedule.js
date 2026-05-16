@@ -14,6 +14,7 @@ router.get("/test", (req, res) => {
  * Example:
  * /api/schedule/journey?from=UN&to=BO&start=0800&date=20260512&maxJourney=3
  */
+ /*
 router.get("/journey", async (req, res) => {
     try {
         const data = await metrolinx.getScheduleDateLineDirection(req.query);
@@ -23,6 +24,7 @@ router.get("/journey", async (req, res) => {
         res.status(500).json({ error: err.message });
     }
 });
+*/
 
 /**
  * GET /api/schedule/lines
