@@ -33,43 +33,17 @@ function msUntilMidnight() {
   return midnight - now;
 }
 
-// Extract unique line‑direction pairs from a full schedule array
-function extractLineDirectionPairs(scheduleData) {
-  const pairs = new Set();
-  for (const trip of scheduleData) {
-    if (trip.LineCode && trip.Direction) {
-      pairs.add(`${trip.LineCode}_${trip.Direction}`);
-    }
-  }
-  return Array.from(pairs).map(pair => {
-    const [line, direction] = pair.split('_');
-    return { line, direction };
-  });
-}
-
 async function preloadCache() {
   const today = getToday();
   console.log("🔥 Preloading cache for:", today);
 
   try {
-    const metrolinx = require("./services/metrolinx");
+    const data = await require("./services/metrolinx").getScheduleAllLine(today);
 
-    // 3. Preload each line‑direction combination
-    for (const { line, direction } of pairs) {
-      const key = `${today}_${line}_${direction}`;
-      if (!cache[key] || cache[key].expiresAt <= Date.now()) {
-        try {
-          const lineData = await metrolinx.getScheduleDateLineDirection(today, line, direction);
-          cache[key] = {
-            data: lineData,
-            expiresAt: Date.now() + msUntilMidnight()
-          };
-          console.log(`✅ Cached: ${key}`);
-        } catch (err) {
-          console.error(`❌ Failed to cache ${key}:`, err.message);
-        }
-      }
-    }
+    cache[today] = {
+      data,
+      expiresAt: Date.now() + msUntilMidnight()
+    };
 
     console.log("✅ Preload complete");
 
@@ -79,16 +53,24 @@ async function preloadCache() {
 }
 
 function startMidnightRefresh() {
-  const delay = msUntilMidnight();
-  console.log(`⏳ Next refresh in ${Math.round(delay / 1000)} sec`);
+  const ms = getMsUntilMidnight();
 
   setTimeout(async () => {
     console.log("🌙 Midnight refresh triggered");
-    // Clear entire cache (all dates will be refetched)
-    Object.keys(cache).forEach(k => delete cache[k]);
-    await preloadCache();
-    startMidnightRefresh();
-  }, delay);
+
+    cache = {}; // or Object.keys(cache).forEach(k => delete cache[k])
+
+    await preloadCache(); // refill everything
+
+    startMidnightRefresh(); // reschedule for next day
+  }, ms);
+}
+
+function getMsUntilMidnight() {
+  const now = new Date();
+  const midnight = new Date();
+  midnight.setHours(24, 0, 0, 0);
+  return midnight - now;
 }
 
 // Attach cache to request (so routes can read it)

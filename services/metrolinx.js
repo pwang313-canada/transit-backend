@@ -50,6 +50,7 @@ async function getScheduleAllLine(date) {
 
 async function getScheduleDateLineDirection(date, line, direction) {
     const url = `${BASE_URL}/Schedule/Line/${date}/${line}/${direction}?key=${API_KEY}`;
+    console.log("URL:", url);
     const res = await axios.get(url);
     return res.data;
 }

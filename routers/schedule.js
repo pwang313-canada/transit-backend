@@ -1,6 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const metrolinx = require("../services/metrolinx");
+global.cache = {};
 
 /**
  * Test route
@@ -8,23 +9,6 @@ const metrolinx = require("../services/metrolinx");
 router.get("/test", (req, res) => {
     res.send("Schedule route works!");
 });
-
-/**
- * GET /api/schedule/journey
- * Example:
- * /api/schedule/journey?from=UN&to=BO&start=0800&date=20260512&maxJourney=3
- */
- /*
-router.get("/journey", async (req, res) => {
-    try {
-        const data = await metrolinx.getScheduleDateLineDirection(req.query);
-        res.json(data);
-    } catch (err) {
-        console.error("Journey error:", err.message);
-        res.status(500).json({ error: err.message });
-    }
-});
-*/
 
 /**
  * GET /api/schedule/lines
@@ -184,32 +168,43 @@ router.get("/date-line-direction", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const { line, direction } = req.query;
-    const cache = req.cache;
 
-    // Build cache key matching the preload format
+    // SAFE CACHE FALLBACK
+    const cache = req.cache || global.cache;
+
+    if (!cache) {
+      return res.status(500).json({ error: "Cache not initialized" });
+    }
+
+    // Validate required params
+    if (!line || !direction) {
+      return res.status(400).json({ error: "Missing line or direction" });
+    }
+
     const cacheKey = `${date}_${line}_${direction}`;
 
-    // Check cache first
-    if (cache[cacheKey] && cache[cacheKey].expiresAt > Date.now()) {
+    // ✅ 1. CACHE HIT → return immediately
+    if (cache[cacheKey]) {
       console.log(`⚡ Cache HIT: ${cacheKey}`);
       return res.json(cache[cacheKey].data);
     }
 
+    // ❌ 2. CACHE MISS → fetch from API
     console.log(`🐢 Cache MISS: ${cacheKey} – fetching live`);
 
-    // Fetch live data
-    const data = await metrolinx.getScheduleDateLineDirection(date, line, direction);
+    const data = await metrolinx.getScheduleDateLineDirection(
+      date,
+      line,
+      direction
+    );
 
-    // Store in cache (expires at midnight)
-    cache[cacheKey] = {
-      data,
-      expiresAt: Date.now() + msUntilMidnight()
-    };
+    // 💾 store in cache
+    cache[cacheKey] = { data };
 
-    res.json(data);
+    return res.json(data);
 
   } catch (err) {
-    console.error("Date‑line‑direction error:", err.message);
+    console.error("Date-line-direction error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });
