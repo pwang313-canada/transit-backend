@@ -182,16 +182,32 @@ router.get("/date-line-direction", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const { line, direction } = req.query;
+    const cache = req.cache;
 
-    const data = await metrolinx.getScheduleDateLineDirection(
-      date,
-      line,
-      direction
-    );
+    // Build cache key matching the preload format
+    const cacheKey = `${date}_${line}_${direction}`;
+
+    // Check cache first
+    if (cache[cacheKey] && cache[cacheKey].expiresAt > Date.now()) {
+      console.log(`⚡ Cache HIT: ${cacheKey}`);
+      return res.json(cache[cacheKey].data);
+    }
+
+    console.log(`🐢 Cache MISS: ${cacheKey} – fetching live`);
+
+    // Fetch live data
+    const data = await metrolinx.getScheduleDateLineDirection(date, line, direction);
+
+    // Store in cache (expires at midnight)
+    cache[cacheKey] = {
+      data,
+      expiresAt: Date.now() + msUntilMidnight()
+    };
 
     res.json(data);
 
   } catch (err) {
+    console.error("Date‑line‑direction error:", err.message);
     res.status(500).json({ error: err.message });
   }
 });

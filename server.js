@@ -9,27 +9,23 @@ const PORT = process.env.PORT || 3000;
 
 app.use(express.json());
 
-// ✅ Mount ALL routers FIRST
 app.use("/api/schedule", scheduleRouter);
 app.use("/api/fares", faresRouter);
 app.use("/api/service", serviceUpdateRouter);
 app.use("/api/feed", feedRouter);
 
-// ✅ Root test
 app.get("/", (req, res) => {
   res.send("API is running");
 });
 
-// ✅ In-memory cache
+// In‑memory cache (only for date‑line‑direction)
 const cache = {};
 
-// ✅ Helper: get today date YYYYMMDD
 function getToday() {
   const now = new Date();
   return now.toISOString().slice(0, 10).replace(/-/g, "");
 }
 
-// ✅ Helper: ms until next midnight
 function msUntilMidnight() {
   const now = new Date();
   const midnight = new Date();
@@ -37,56 +33,72 @@ function msUntilMidnight() {
   return midnight - now;
 }
 
-// ✅ Preload cache for today
+// Extract unique line‑direction pairs from a full schedule array
+function extractLineDirectionPairs(scheduleData) {
+  const pairs = new Set();
+  for (const trip of scheduleData) {
+    if (trip.LineCode && trip.Direction) {
+      pairs.add(`${trip.LineCode}_${trip.Direction}`);
+    }
+  }
+  return Array.from(pairs).map(pair => {
+    const [line, direction] = pair.split('_');
+    return { line, direction };
+  });
+}
+
 async function preloadCache() {
   const today = getToday();
   console.log("🔥 Preloading cache for:", today);
 
   try {
-    const data = await require("./services/metrolinx").getScheduleAllLine(today);
+    const metrolinx = require("./services/metrolinx");
 
-    cache[today] = {
-      data,
-      expiresAt: Date.now() + msUntilMidnight()
-    };
+    // 3. Preload each line‑direction combination
+    for (const { line, direction } of pairs) {
+      const key = `${today}_${line}_${direction}`;
+      if (!cache[key] || cache[key].expiresAt <= Date.now()) {
+        try {
+          const lineData = await metrolinx.getScheduleDateLineDirection(today, line, direction);
+          cache[key] = {
+            data: lineData,
+            expiresAt: Date.now() + msUntilMidnight()
+          };
+          console.log(`✅ Cached: ${key}`);
+        } catch (err) {
+          console.error(`❌ Failed to cache ${key}:`, err.message);
+        }
+      }
+    }
 
-    console.log("✅ Cache ready for", today);
+    console.log("✅ Preload complete");
+
   } catch (err) {
     console.error("❌ Preload failed:", err.message);
   }
 }
 
-// ✅ Midnight refresh loop
 function startMidnightRefresh() {
   const delay = msUntilMidnight();
-
   console.log(`⏳ Next refresh in ${Math.round(delay / 1000)} sec`);
 
   setTimeout(async () => {
     console.log("🌙 Midnight refresh triggered");
-
-    // Clear old cache
+    // Clear entire cache (all dates will be refetched)
     Object.keys(cache).forEach(k => delete cache[k]);
-
-    // Preload new day
     await preloadCache();
-
-    // Restart loop
     startMidnightRefresh();
   }, delay);
 }
 
-// ✅ Attach cache to request
+// Attach cache to request (so routes can read it)
 app.use((req, res, next) => {
   req.cache = cache;
   next();
 });
 
-
-// ✅ Start server + preload
 app.listen(PORT, async () => {
   console.log(`🚀 Server running on port ${PORT}`);
-
-  await preloadCache();       // 🔥 preload immediately
-  startMidnightRefresh();     // 🔁 schedule daily refresh
+  await preloadCache();
+  startMidnightRefresh();
 });
