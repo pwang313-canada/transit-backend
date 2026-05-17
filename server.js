@@ -11,7 +11,7 @@ app.use(express.json());
 
 app.use("/api/schedule", scheduleRouter);
 app.use("/api/fares", faresRouter);
-app.use("/api/service", serviceUpdateRouter);
+app.use("/api/serviceUpdate", serviceUpdateRouter);
 app.use("/api/feed", feedRouter);
 
 app.get("/", (req, res) => {
