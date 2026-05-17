@@ -4,8 +4,6 @@ const metrolinx = require("../services/metrolinx");
 
 router.get("/serviceAlert", async (req, res) => {
     try {
-        console.log(`serviceAlert`);
-
         const data = await metrolinx.getServiceAlert();
         res.json(data);
     } catch (err) {
