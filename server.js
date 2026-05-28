@@ -58,11 +58,12 @@ function startMidnightRefresh() {
   setTimeout(async () => {
     console.log("🌙 Midnight refresh triggered");
 
-    cache = {}; // or Object.keys(cache).forEach(k => delete cache[k])
+    // ✅ FIXED
+    Object.keys(cache).forEach(k => delete cache[k]);
 
-    await preloadCache(); // refill everything
+    await preloadCache();
 
-    startMidnightRefresh(); // reschedule for next day
+    startMidnightRefresh();
   }, ms);
 }
 
