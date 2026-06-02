@@ -209,7 +209,7 @@ router.get("/date-line-direction", async (req, res) => {
   }
 });
 
-router.get("/date-date-trip", async (req, res) => {
+router.get("/date-trip", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const { trip } = req.query;
