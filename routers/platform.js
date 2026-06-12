@@ -1,17 +1,61 @@
 const express = require("express");
 const router = express.Router();
-
-// ✅ FIX: import service, not router
 const gotracker = require("../services/gotracker");
 
+// Convert service name to two-letter code
+const serviceToCode = (serviceName) => {
+  const mapping = {
+    "Lakeshore West": "LW",
+    "Lakeshore East": "LE",
+    "Milton": "MI",
+    "Barrie": "BR",
+    "Kitchener": "KI",
+    "Stouffville": "ST",
+    "Richmond Hill": "RH",
+  };
+  return mapping[serviceName] || serviceName.substring(0, 2).toUpperCase();
+};
+
+// Convert ISO timestamp to local time string HH:MM:SS
+const toLocalTimeHMS = (isoString) => {
+  if (!isoString) return null;
+  const date = new Date(isoString);
+  return date.toLocaleTimeString('en-CA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false,
+  });
+};
+
 router.get("/", async (req, res) => {
-    try {
-        const data = await gotracker.getPlatForm(); // match exact name
-        res.json(data);
-    } catch (err) {
-        console.error(err.message);
-        res.status(500).json({ error: "Platform API failed" });
+  try {
+    const rawData = await gotracker.getPlatForm();
+
+    if (!rawData || rawData.status !== "Ok") {
+      return res.status(500).json({ error: "Invalid data from GO Tracker" });
     }
+
+    const filteredTrips = rawData.trips
+      .filter(trip => trip.info !== "Wait" && trip.platform !== "-")
+      .map(trip => ({
+        number: trip.number,
+        isExpress: trip.isExpress || false,
+        coachCount: trip.coachCount,
+        time: toLocalTimeHMS(trip.time),
+        platform: trip.platform,
+        service: serviceToCode(trip.service),   // ✅ now returns "LW", "LE", etc.
+      }));
+
+    res.json({
+      status: "Ok",
+      date: rawData.date,
+      trips: filteredTrips,
+    });
+  } catch (err) {
+    console.error(err.message);
+    res.status(500).json({ error: "Platform API failed" });
+  }
 });
 
 module.exports = router;
