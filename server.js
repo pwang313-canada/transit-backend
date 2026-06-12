@@ -4,7 +4,7 @@ const scheduleRouter = require("./routers/schedule");
 const serviceUpdateRouter = require("./routers/serviceUpdate");
 const faresRouter = require("./routers/fares");
 const feedRouter = require("./routers/feed");
-const platformRouter = require("./routers/platform");
+const goTrackerRouter = require("./routers/goTracker");
 
 const PORT = process.env.PORT || 3000;
 
@@ -14,7 +14,7 @@ app.use("/api/schedule", scheduleRouter);
 app.use("/api/fares", faresRouter);
 app.use("/api/serviceUpdate", serviceUpdateRouter);
 app.use("/api/feed", feedRouter);
-app.use("/api/platform", platformRouter);
+app.use("/api/goTracker", goTrackerRouter);
 
 app.get("/", (req, res) => {
   res.send("API is running");

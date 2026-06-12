@@ -28,7 +28,7 @@ const toLocalTimeHMS = (isoString) => {
   });
 };
 
-router.get("/", async (req, res) => {
+router.get("/platform", async (req, res) => {
   try {
     const rawData = await gotracker.getPlatForm();
 
@@ -55,6 +55,16 @@ router.get("/", async (req, res) => {
   } catch (err) {
     console.error(err.message);
     res.status(500).json({ error: "Platform API failed" });
+  }
+});
+
+router.get("/trip", async (req, res) => {
+  try {
+    const trip = req.query.trip;
+    const data = await gotracker.getTrip(trip);
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: "goTracker trip API failed" });
   }
 });
 
