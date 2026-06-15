@@ -167,7 +167,20 @@ router.get("/all-line", async (req, res) => {
 
 router.get("/date-line-direction", async (req, res) => {
   try {
-    const date = req.query.date || getToday();
+    // Helper: get today's date in YYYYMMDD in Toronto time
+    const getTodayEST = () => {
+      const torontoDate = new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" });
+      return torontoDate.replace(/-/g, "");
+    };
+
+    // Helper: get current time in seconds since midnight in Toronto time
+    const getCurrentESTSeconds = () => {
+      const nowToronto = new Date().toLocaleString("en-US", { timeZone: "America/Toronto" });
+      const nowDate = new Date(nowToronto);
+      return nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
+    };
+
+    const date = req.query.date || getTodayEST();
     const { line, direction } = req.query;
     const maxTrips = parseInt(req.query.maxTrips, 10) || 10;
 
@@ -180,21 +193,20 @@ router.get("/date-line-direction", async (req, res) => {
       return res.status(400).json({ error: "Missing line or direction" });
     }
 
-    const todayStr = getToday();
+    const todayStr = getTodayEST();
     const isToday = (date === todayStr);
     const cacheKey = `${date}_${line}_${direction}`;
     let rawData;
 
-    // ---- LOGGING: Show current environment info ----
-    const now = new Date();
-    console.log(`[DEBUG] Server time: ${now.toString()}`);
-    console.log(`[DEBUG] UTC time: ${now.toUTCString()}`);
-    console.log(`[DEBUG] ISO string: ${now.toISOString()}`);
+    // Log environment info (Toronto time)
+    const nowTorontoStr = new Date().toLocaleString("en-US", { timeZone: "America/Toronto" });
+    console.log(`[DEBUG] Toronto time: ${nowTorontoStr}`);
     console.log(`[DEBUG] Requested date: ${date}, todayStr: ${todayStr}, isToday: ${isToday}`);
 
     if (isToday) {
-      console.log(`🟢 Today’s date (${date}) – bypassing cache, fetching live`);
+      console.log(`🟢 Today’s date (${date}) – fetching live (cache bypassed)`);
       rawData = await metrolinx.getScheduleDateLineDirection(date, line, direction);
+      // Optionally store raw data in cache for other uses, but do not rely on it for today's filtering
       cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     } else {
       if (cache[cacheKey]?.data) {
@@ -207,7 +219,7 @@ router.get("/date-line-direction", async (req, res) => {
       }
     }
 
-    // ---- LOG RAW TRIP COUNT ----
+    // Log raw trip count
     let rawTripCount = 0;
     const rawLines = rawData?.Lines?.Line;
     if (rawLines && rawLines.length > 0) {
@@ -216,12 +228,11 @@ router.get("/date-line-direction", async (req, res) => {
     }
     console.log(`[DEBUG] Raw trips from metrolinx: ${rawTripCount}`);
 
-    // ---- Apply time filter only for today ----
+    // Apply time filter only for today
     let filteredData = rawData;
     if (isToday) {
-      const nowLocal = new Date();
-      const currentSeconds = nowLocal.getHours() * 3600 + nowLocal.getMinutes() * 60 + nowLocal.getSeconds();
-      console.log(`[DEBUG] Current local time: ${nowLocal.toLocaleString()}, seconds since midnight: ${currentSeconds}`);
+      const currentSeconds = getCurrentESTSeconds();
+      console.log(`[DEBUG] Current Toronto seconds since midnight: ${currentSeconds}`);
 
       const timeToSeconds = (timeStr) => {
         let timePart = timeStr;
@@ -259,7 +270,7 @@ router.get("/date-line-direction", async (req, res) => {
               if (keep) keptTrips.push(trip);
             }
             lineObj.Trip = keptTrips;
-            console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (last stop > now)`);
+            console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (last stop > now Toronto time)`);
           }
         }
       }
@@ -274,7 +285,7 @@ router.get("/date-line-direction", async (req, res) => {
       }
     }
 
-    // ---- Limit number of trips per line to maxTrips ----
+    // Limit number of trips per line to maxTrips
     const lines = filteredData.Lines?.Line;
     if (lines && lines.length > 0) {
       for (const lineObj of lines) {
@@ -285,7 +296,6 @@ router.get("/date-line-direction", async (req, res) => {
       }
     }
 
-    // ---- FINAL LOG: how many trips are being returned ----
     const finalTripCount = lines && lines[0]?.Trip?.length || 0;
     console.log(`[DEBUG] Returning ${finalTripCount} trips for ${line} ${direction} on ${date}`);
 
