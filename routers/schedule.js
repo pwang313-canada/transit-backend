@@ -185,14 +185,18 @@ router.get("/date-line-direction", async (req, res) => {
     const cacheKey = `${date}_${line}_${direction}`;
     let rawData;
 
+    // ---- LOGGING: Show current environment info ----
+    const now = new Date();
+    console.log(`[DEBUG] Server time: ${now.toString()}`);
+    console.log(`[DEBUG] UTC time: ${now.toUTCString()}`);
+    console.log(`[DEBUG] ISO string: ${now.toISOString()}`);
+    console.log(`[DEBUG] Requested date: ${date}, todayStr: ${todayStr}, isToday: ${isToday}`);
+
     if (isToday) {
-      // ✅ For today: always fetch fresh data – no cache
       console.log(`🟢 Today’s date (${date}) – bypassing cache, fetching live`);
       rawData = await metrolinx.getScheduleDateLineDirection(date, line, direction);
-      // Optionally, still store in cache for future same‑day requests (but be careful)
       cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     } else {
-      // For other dates: use cache if available
       if (cache[cacheKey]?.data) {
         console.log(`⚡ Cache HIT: ${cacheKey}`);
         rawData = cache[cacheKey].data;
@@ -203,11 +207,21 @@ router.get("/date-line-direction", async (req, res) => {
       }
     }
 
-    // ---- Apply time filter only for today (still needed) ----
+    // ---- LOG RAW TRIP COUNT ----
+    let rawTripCount = 0;
+    const rawLines = rawData?.Lines?.Line;
+    if (rawLines && rawLines.length > 0) {
+      const lineObj = Array.isArray(rawLines) ? rawLines[0] : rawLines;
+      rawTripCount = lineObj.Trip?.length || 0;
+    }
+    console.log(`[DEBUG] Raw trips from metrolinx: ${rawTripCount}`);
+
+    // ---- Apply time filter only for today ----
     let filteredData = rawData;
     if (isToday) {
-      const now = new Date();
-      const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
+      const nowLocal = new Date();
+      const currentSeconds = nowLocal.getHours() * 3600 + nowLocal.getMinutes() * 60 + nowLocal.getSeconds();
+      console.log(`[DEBUG] Current local time: ${nowLocal.toLocaleString()}, seconds since midnight: ${currentSeconds}`);
 
       const timeToSeconds = (timeStr) => {
         let timePart = timeStr;
@@ -227,14 +241,24 @@ router.get("/date-line-direction", async (req, res) => {
         for (const lineObj of lines) {
           if (lineObj.Trip && Array.isArray(lineObj.Trip)) {
             const originalCount = lineObj.Trip.length;
-            lineObj.Trip = lineObj.Trip.filter(trip => {
+            const keptTrips = [];
+            for (const trip of lineObj.Trip) {
               const stops = trip.Stops;
-              if (!stops || stops.length === 0) return false;
+              if (!stops || stops.length === 0) {
+                console.log(`[DEBUG] Trip ${trip.Number} has no stops – skipping`);
+                continue;
+              }
               const lastStop = stops[stops.length - 1];
-              if (!lastStop.Time) return false;
+              if (!lastStop.Time) {
+                console.log(`[DEBUG] Trip ${trip.Number} last stop has no time – skipping`);
+                continue;
+              }
               const lastSeconds = timeToSeconds(lastStop.Time);
-              return lastSeconds > currentSeconds;
-            });
+              const keep = lastSeconds > currentSeconds;
+              console.log(`[DEBUG] Trip ${trip.Number}: last stop "${lastStop.Code}" time "${lastStop.Time}" -> seconds ${lastSeconds} > ${currentSeconds} ? ${keep}`);
+              if (keep) keptTrips.push(trip);
+            }
+            lineObj.Trip = keptTrips;
             console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (last stop > now)`);
           }
         }
@@ -260,6 +284,10 @@ router.get("/date-line-direction", async (req, res) => {
         }
       }
     }
+
+    // ---- FINAL LOG: how many trips are being returned ----
+    const finalTripCount = lines && lines[0]?.Trip?.length || 0;
+    console.log(`[DEBUG] Returning ${finalTripCount} trips for ${line} ${direction} on ${date}`);
 
     return res.json(filteredData);
 
