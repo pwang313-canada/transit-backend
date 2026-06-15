@@ -168,7 +168,7 @@ router.get("/date-line-direction", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const { line, direction } = req.query;
-    const maxTrips = parseInt(req.query.maxTrips, 10) || 10; // default 10
+    const maxTrips = parseInt(req.query.maxTrips, 10) || 10;
 
     const cache = req.cache || global.cache;
     if (!cache) {
@@ -190,30 +190,37 @@ router.get("/date-line-direction", async (req, res) => {
       console.log(`⚡ Cache HIT: ${cacheKey}`);
     }
 
-    // ---- Apply time filter only for today ----
     const todayStr = getToday();
     let filteredData = rawData;
-    let hasRemainingTrips = true;
 
     if (date === todayStr) {
       const now = new Date();
       const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
       const timeToSeconds = (timeStr) => {
-        const parts = timeStr.split(':');
+        // If string contains space, take the part after space (the time)
+        let timePart = timeStr;
+        if (timeStr.includes(' ')) {
+          timePart = timeStr.split(' ')[1];
+        }
+        const parts = timePart.split(':');
         if (parts.length < 2) return 0;
         const hours = parseInt(parts[0], 10);
         const minutes = parseInt(parts[1], 10);
         const seconds = parts.length > 2 ? parseInt(parts[2], 10) : 0;
+        if (hours === 24) return 86400;
         return hours * 3600 + minutes * 60 + seconds;
       };
 
+      // Deep clone to avoid mutating cache
       filteredData = JSON.parse(JSON.stringify(rawData));
 
       const lines = filteredData.Lines?.Line;
       if (lines && lines.length > 0) {
         for (const lineObj of lines) {
           if (lineObj.Trip && Array.isArray(lineObj.Trip)) {
+            // ✅ Keep only trips where last stop time > current time
+            const originalCount = lineObj.Trip.length;
             lineObj.Trip = lineObj.Trip.filter(trip => {
               const stops = trip.Stops;
               if (!stops || stops.length === 0) return false;
@@ -221,12 +228,15 @@ router.get("/date-line-direction", async (req, res) => {
               const lastStopTime = lastStop.Time;
               if (!lastStopTime) return false;
               const lastSeconds = timeToSeconds(lastStopTime);
-              return lastSeconds > currentSeconds - 15;
+              // Strictly greater than current time (no grace)
+              return lastSeconds > currentSeconds;
             });
+            console.log(`✂️ Filtered trips for ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length}`);
           }
         }
       }
 
+      // Check if any trips remain
       const anyTripLeft = lines?.some(lineObj =>
         lineObj.Trip && lineObj.Trip.length > 0
       );
