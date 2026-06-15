@@ -180,30 +180,38 @@ router.get("/date-line-direction", async (req, res) => {
       return res.status(400).json({ error: "Missing line or direction" });
     }
 
+    const todayStr = getToday();
+    const isToday = (date === todayStr);
     const cacheKey = `${date}_${line}_${direction}`;
-    let rawData = cache[cacheKey]?.data;
+    let rawData;
 
-    if (!rawData) {
-      console.log(`🐢 Cache MISS: ${cacheKey} – fetching live`);
+    if (isToday) {
+      // ✅ For today: always fetch fresh data – no cache
+      console.log(`🟢 Today’s date (${date}) – bypassing cache, fetching live`);
       rawData = await metrolinx.getScheduleDateLineDirection(date, line, direction);
-      cache[cacheKey] = { data: rawData };
+      // Optionally, still store in cache for future same‑day requests (but be careful)
+      cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     } else {
-      console.log(`⚡ Cache HIT: ${cacheKey}`);
+      // For other dates: use cache if available
+      if (cache[cacheKey]?.data) {
+        console.log(`⚡ Cache HIT: ${cacheKey}`);
+        rawData = cache[cacheKey].data;
+      } else {
+        console.log(`🐢 Cache MISS: ${cacheKey} – fetching live`);
+        rawData = await metrolinx.getScheduleDateLineDirection(date, line, direction);
+        cache[cacheKey] = { data: rawData };
+      }
     }
 
-    const todayStr = getToday();
+    // ---- Apply time filter only for today (still needed) ----
     let filteredData = rawData;
-
-    if (date === todayStr) {
+    if (isToday) {
       const now = new Date();
       const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
       const timeToSeconds = (timeStr) => {
-        // If string contains space, take the part after space (the time)
         let timePart = timeStr;
-        if (timeStr.includes(' ')) {
-          timePart = timeStr.split(' ')[1];
-        }
+        if (timeStr.includes(' ')) timePart = timeStr.split(' ')[1];
         const parts = timePart.split(':');
         if (parts.length < 2) return 0;
         const hours = parseInt(parts[0], 10);
@@ -213,36 +221,30 @@ router.get("/date-line-direction", async (req, res) => {
         return hours * 3600 + minutes * 60 + seconds;
       };
 
-      // Deep clone to avoid mutating cache
       filteredData = JSON.parse(JSON.stringify(rawData));
-
       const lines = filteredData.Lines?.Line;
       if (lines && lines.length > 0) {
         for (const lineObj of lines) {
           if (lineObj.Trip && Array.isArray(lineObj.Trip)) {
-            // ✅ Keep only trips where last stop time > current time
             const originalCount = lineObj.Trip.length;
             lineObj.Trip = lineObj.Trip.filter(trip => {
               const stops = trip.Stops;
               if (!stops || stops.length === 0) return false;
               const lastStop = stops[stops.length - 1];
-              const lastStopTime = lastStop.Time;
-              if (!lastStopTime) return false;
-              const lastSeconds = timeToSeconds(lastStopTime);
-              // Strictly greater than current time (no grace)
+              if (!lastStop.Time) return false;
+              const lastSeconds = timeToSeconds(lastStop.Time);
               return lastSeconds > currentSeconds;
             });
-            console.log(`✂️ Filtered trips for ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length}`);
+            console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (last stop > now)`);
           }
         }
       }
 
-      // Check if any trips remain
       const anyTripLeft = lines?.some(lineObj =>
         lineObj.Trip && lineObj.Trip.length > 0
       );
       if (!anyTripLeft) {
-        console.log(`🗑️ All trips passed for ${cacheKey} – deleting cache entry`);
+        console.log(`🗑️ No remaining trips for today – deleting cache entry`);
         delete cache[cacheKey];
         return res.json({ Lines: { Line: [] } });
       }
