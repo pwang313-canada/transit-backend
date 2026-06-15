@@ -168,6 +168,7 @@ router.get("/date-line-direction", async (req, res) => {
   try {
     const date = req.query.date || getToday();
     const { line, direction } = req.query;
+    const maxTrips = parseInt(req.query.maxTrips, 10) || 10; // default 10
 
     const cache = req.cache || global.cache;
     if (!cache) {
@@ -184,14 +185,13 @@ router.get("/date-line-direction", async (req, res) => {
     if (!rawData) {
       console.log(`🐢 Cache MISS: ${cacheKey} – fetching live`);
       rawData = await metrolinx.getScheduleDateLineDirection(date, line, direction);
-      // store raw (unfiltered) data in cache
       cache[cacheKey] = { data: rawData };
     } else {
       console.log(`⚡ Cache HIT: ${cacheKey}`);
     }
 
     // ---- Apply time filter only for today ----
-    const todayStr = getToday(); // YYYYMMDD
+    const todayStr = getToday();
     let filteredData = rawData;
     let hasRemainingTrips = true;
 
@@ -199,7 +199,6 @@ router.get("/date-line-direction", async (req, res) => {
       const now = new Date();
       const currentSeconds = now.getHours() * 3600 + now.getMinutes() * 60 + now.getSeconds();
 
-      // Helper: convert "HH:MM" or "HH:MM:SS" to seconds since midnight
       const timeToSeconds = (timeStr) => {
         const parts = timeStr.split(':');
         if (parts.length < 2) return 0;
@@ -209,14 +208,12 @@ router.get("/date-line-direction", async (req, res) => {
         return hours * 3600 + minutes * 60 + seconds;
       };
 
-      // Deep clone and filter trips
-      filteredData = JSON.parse(JSON.stringify(rawData)); // simple clone
+      filteredData = JSON.parse(JSON.stringify(rawData));
 
       const lines = filteredData.Lines?.Line;
       if (lines && lines.length > 0) {
         for (const lineObj of lines) {
           if (lineObj.Trip && Array.isArray(lineObj.Trip)) {
-            // Keep only trips whose last stop time > current time
             lineObj.Trip = lineObj.Trip.filter(trip => {
               const stops = trip.Stops;
               if (!stops || stops.length === 0) return false;
@@ -224,23 +221,30 @@ router.get("/date-line-direction", async (req, res) => {
               const lastStopTime = lastStop.Time;
               if (!lastStopTime) return false;
               const lastSeconds = timeToSeconds(lastStopTime);
-              // Allow trips that depart at exactly current time? Use > for strict future.
-              // Add a 15‑second grace window to avoid missing trips that are just departing.
               return lastSeconds > currentSeconds - 15;
             });
           }
         }
       }
 
-      // Check if any trips remain
       const anyTripLeft = lines?.some(lineObj =>
         lineObj.Trip && lineObj.Trip.length > 0
       );
       if (!anyTripLeft) {
         console.log(`🗑️ All trips passed for ${cacheKey} – deleting cache entry`);
         delete cache[cacheKey];
-        // Return empty response
         return res.json({ Lines: { Line: [] } });
+      }
+    }
+
+    // ---- Limit number of trips per line to maxTrips ----
+    const lines = filteredData.Lines?.Line;
+    if (lines && lines.length > 0) {
+      for (const lineObj of lines) {
+        if (lineObj.Trip && Array.isArray(lineObj.Trip) && lineObj.Trip.length > maxTrips) {
+          console.log(`✂️ Limiting trips from ${lineObj.Trip.length} to ${maxTrips}`);
+          lineObj.Trip = lineObj.Trip.slice(0, maxTrips);
+        }
       }
     }
 
