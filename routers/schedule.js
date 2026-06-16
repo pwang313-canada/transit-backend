@@ -181,7 +181,7 @@ router.get("/date-stops", async (req, res) => {
 
     const todayStr = getToday();
     const isToday = (date === todayStr);
-    const cacheKey = `${date}_${line}_${direction}`;
+    const cacheKey = `stop_${date}_${line}_${direction}`;
     let rawData;
 
     if (isToday) {
@@ -248,7 +248,7 @@ router.get("/date-line-direction", async (req, res) => {
 
     // Use the requested date (or today) to fetch raw schedule
     const targetDateStr = dateParam || new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" }).replace(/-/g, "");
-    const cacheKey = `${targetDateStr}_${line}_${direction}`;
+    const cacheKey = `trip_${targetDateStr}_${line}_${direction}`;
     let rawData;
 
     if (cache[cacheKey]?.data) {
