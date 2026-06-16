@@ -210,37 +210,9 @@ router.get("/date-stops", async (req, res) => {
 
 router.get("/date-line-direction", async (req, res) => {
   try {
-    // Helper: get current time as a Date object in Toronto timezone
-    const getCurrentTorontoDate = () => {
-      const nowTorontoStr = new Date().toLocaleString("en-US", { timeZone: "America/Toronto" });
-      return new Date(nowTorontoStr);
-    };
-
-    // Helper: parse API datetime string "YYYY-MM-DD HH:MM:SS" into a Date object
-    // Assumes the string is in Toronto local time.
-    const parseApiDateTime = (dateTimeStr) => {
-      const [datePart, timePart] = dateTimeStr.split(' ');
-      const [year, month, day] = datePart.split('-').map(Number);
-      const [hour, minute, second] = timePart.split(':').map(Number);
-      // Create a Date object using UTC to avoid local timezone shifting
-      // Then we will treat it as Toronto time by comparing with current Toronto time.
-      // The trick: we will convert both to UTC milliseconds and compare, but we need the offset.
-      // Simpler: create a Date using the components in UTC, then add the current Toronto offset?
-      // Instead, we'll parse the string as if it were in the server's local time (which may not be Toronto).
-      // To guarantee correctness, we must use the timezone. Without a library, it's messy.
-      // However, since the backend is likely hosted in Toronto, we can assume the server's local time is Toronto.
-      // If that's true, we can simply do:
-      return new Date(`${datePart}T${timePart}`);
-    };
-
-    const getCurrentEST = () => {
-      const now = getCurrentTorontoDate();
-      return now;
-    };
-
     const dateParam = req.query.date;
-    const { line, direction, stopId } = req.query;
-    const maxTrips = parseInt(req.query.maxTrips, 10) || 10;
+    const { line, direction } = req.query;
+    const maxTrips = parseInt(req.query.maxTrips, 50) || 50;
 
     const cache = req.cache || global.cache;
     if (!cache) return res.status(500).json({ error: "Cache not initialized" });
@@ -260,7 +232,7 @@ router.get("/date-line-direction", async (req, res) => {
       cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     }
 
-    const now = getCurrentEST();
+    // Clone the data
     const filteredData = JSON.parse(JSON.stringify(rawData));
     const lines = filteredData.Lines?.Line;
 
@@ -268,37 +240,32 @@ router.get("/date-line-direction", async (req, res) => {
       for (const lineObj of lines) {
         if (lineObj.Trip && Array.isArray(lineObj.Trip)) {
           const originalCount = lineObj.Trip.length;
-          const keptTrips = [];
+          // Keep all trips (no time filter)
+          let keptTrips = lineObj.Trip;
 
-          for (const trip of lineObj.Trip) {
-            const stops = trip.Stops;
-            if (!stops || stops.length === 0) continue;
-
-            let referenceTime = null;
-            if (stopId) {
-              const stopInfo = stops.find(s => s.Code === stopId);
-              if (stopInfo) referenceTime = parseApiDateTime(stopInfo.Time);
-            } else {
-              referenceTime = parseApiDateTime(stops[0].Time);
-            }
-
-            if (referenceTime) {
-              const diffMinutes = (referenceTime - now) / (1000 * 60);
-              // Keep if departure time is not more than 15 minutes ago
-              if (diffMinutes >= -15) {
-                keptTrips.push(trip);
-              }
-            }
-          }
+          // Sort trips by first stop time (ascending)
+          const parseTime = (timeStr) => {
+            // Helper to parse "HH:MM:SS" or "YYYY-MM-DD HH:MM:SS"
+            let timePart = timeStr;
+            if (timeStr.includes(' ')) timePart = timeStr.split(' ')[1];
+            const parts = timePart.split(':');
+            if (parts.length < 2) return 0;
+            const hours = parseInt(parts[0], 10);
+            const minutes = parseInt(parts[1], 10);
+            const seconds = parts.length > 2 ? parseInt(parts[2], 10) : 0;
+            if (hours === 24) return 86400;
+            return hours * 3600 + minutes * 60 + seconds;
+          };
 
           keptTrips.sort((a, b) => {
-            const ta = parseApiDateTime(a.Stops[0].Time);
-            const tb = parseApiDateTime(b.Stops[0].Time);
-            return ta - tb;
+            const timeA = parseTime(a.Stops[0]?.Time || '00:00:00');
+            const timeB = parseTime(b.Stops[0]?.Time || '00:00:00');
+            return timeA - timeB;
           });
 
+          // Limit to maxTrips
           lineObj.Trip = keptTrips.slice(0, maxTrips);
-          console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips`);
+          console.log(`⏰ Returned ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (no time filter, max ${maxTrips})`);
         }
       }
     }
@@ -306,22 +273,6 @@ router.get("/date-line-direction", async (req, res) => {
     return res.json(filteredData);
   } catch (err) {
     console.error("Date-line-direction error:", err.message);
-    res.status(500).json({ error: err.message });
-  }
-});
-router.get("/date-trip", async (req, res) => {
-  try {
-    const date = req.query.date || getToday();
-    const { trip } = req.query;
-
-    const data = await metrolinx.getScheduleDateTrip(
-      date,
-      trip
-    );
-
-    res.json(data);
-
-  } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
