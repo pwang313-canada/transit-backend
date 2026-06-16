@@ -212,7 +212,7 @@ router.get("/date-line-direction", async (req, res) => {
   try {
     const dateParam = req.query.date;
     const { line, direction } = req.query;
-    const maxTrips = parseInt(req.query.maxTrips, 10) || 50;
+    const maxTrips = parseInt(req.query.maxTrips, 20) || 20;
 
     const cache = req.cache || global.cache;
     if (!cache) return res.status(500).json({ error: "Cache not initialized" });
