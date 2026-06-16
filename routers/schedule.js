@@ -212,13 +212,12 @@ router.get("/date-line-direction", async (req, res) => {
   try {
     const dateParam = req.query.date;
     const { line, direction } = req.query;
-    const maxTrips = parseInt(req.query.maxTrips, 50) || 50;
+    const maxTrips = parseInt(req.query.maxTrips, 10) || 50;
 
     const cache = req.cache || global.cache;
     if (!cache) return res.status(500).json({ error: "Cache not initialized" });
     if (!line || !direction) return res.status(400).json({ error: "Missing line or direction" });
 
-    // Use the requested date (or today) to fetch raw schedule
     const targetDateStr = dateParam || new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" }).replace(/-/g, "");
     const cacheKey = `trip_${targetDateStr}_${line}_${direction}`;
     let rawData;
@@ -232,40 +231,60 @@ router.get("/date-line-direction", async (req, res) => {
       cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     }
 
-    // Clone the data
     const filteredData = JSON.parse(JSON.stringify(rawData));
     const lines = filteredData.Lines?.Line;
+
+    // Helper to convert a time string (HH:MM:SS or full datetime) to seconds since midnight
+    const timeToSeconds = (timeStr) => {
+      let timePart = timeStr;
+      if (timeStr.includes(' ')) timePart = timeStr.split(' ')[1];
+      const parts = timePart.split(':');
+      if (parts.length < 2) return 0;
+      const hours = parseInt(parts[0], 10);
+      const minutes = parseInt(parts[1], 10);
+      const seconds = parts.length > 2 ? parseInt(parts[2], 10) : 0;
+      if (hours === 24) return 86400;
+      return hours * 3600 + minutes * 60 + seconds;
+    };
+
+    // Get current time in seconds since midnight (Toronto time)
+    const nowToronto = new Date().toLocaleString("en-US", { timeZone: "America/Toronto" });
+    const nowDate = new Date(nowToronto);
+    const currentSeconds = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
 
     if (lines && lines.length > 0) {
       for (const lineObj of lines) {
         if (lineObj.Trip && Array.isArray(lineObj.Trip)) {
           const originalCount = lineObj.Trip.length;
-          // Keep all trips (no time filter)
-          let keptTrips = lineObj.Trip;
+          const keptTrips = [];
+
+          for (const trip of lineObj.Trip) {
+            const stops = trip.Stops;
+            if (!stops || stops.length === 0) continue;
+
+            // Get the last stop's time
+            const lastStop = stops[stops.length - 1];
+            if (!lastStop || !lastStop.Time) continue;
+
+            const lastSeconds = timeToSeconds(lastStop.Time);
+            // Keep trip only if the last stop is in the future (not yet completed)
+            if (lastSeconds > currentSeconds) {
+              keptTrips.push(trip);
+            } else {
+              console.log(`⏱️ Discard trip ${trip.Number} (last stop ${lastStop.Code} at ${lastStop.Time}) – already passed`);
+            }
+          }
 
           // Sort trips by first stop time (ascending)
-          const parseTime = (timeStr) => {
-            // Helper to parse "HH:MM:SS" or "YYYY-MM-DD HH:MM:SS"
-            let timePart = timeStr;
-            if (timeStr.includes(' ')) timePart = timeStr.split(' ')[1];
-            const parts = timePart.split(':');
-            if (parts.length < 2) return 0;
-            const hours = parseInt(parts[0], 10);
-            const minutes = parseInt(parts[1], 10);
-            const seconds = parts.length > 2 ? parseInt(parts[2], 10) : 0;
-            if (hours === 24) return 86400;
-            return hours * 3600 + minutes * 60 + seconds;
-          };
-
           keptTrips.sort((a, b) => {
-            const timeA = parseTime(a.Stops[0]?.Time || '00:00:00');
-            const timeB = parseTime(b.Stops[0]?.Time || '00:00:00');
+            const timeA = timeToSeconds(a.Stops[0]?.Time || '00:00:00');
+            const timeB = timeToSeconds(b.Stops[0]?.Time || '00:00:00');
             return timeA - timeB;
           });
 
           // Limit to maxTrips
           lineObj.Trip = keptTrips.slice(0, maxTrips);
-          console.log(`⏰ Returned ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (no time filter, max ${maxTrips})`);
+          console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (keep trips with last stop > now)`);
         }
       }
     }
@@ -276,7 +295,6 @@ router.get("/date-line-direction", async (req, res) => {
     res.status(500).json({ error: err.message });
   }
 });
-
 
 router.get("/service-alert", async (req, res) => {
   try {
