@@ -164,6 +164,49 @@ router.get("/all-line", async (req, res) => {
   }
 });
 
+router.get("/stop-date-line-direction", async (req, res) => {
+  try {
+
+    const date = req.query.date || getToday();
+    const { line, direction } = req.query;
+
+    const cache = req.cache || global.cache;
+    if (!cache) {
+      return res.status(500).json({ error: "Cache not initialized" });
+    }
+
+    if (!line || !direction) {
+      return res.status(400).json({ error: "Missing line or direction" });
+    }
+
+    const todayStr = getToday();
+    const isToday = (date === todayStr);
+    const cacheKey = `${date}_${line}_${direction}`;
+    let rawData;
+
+    if (isToday) {
+      //console.log(`🟢 Today’s date (${date}) – fetching live (cache bypassed)`);
+      rawData = await metrolinx.getScheduleStopDateLineDirection(date, line, direction);
+      // Optionally store raw data in cache for other uses, but do not rely on it for today's filtering
+      cache[cacheKey] = { data: rawData, timestamp: Date.now() };
+    } else {
+      if (cache[cacheKey]?.data) {
+        console.log(`⚡ Cache HIT: ${cacheKey}`);
+        rawData = cache[cacheKey].data;
+      } else {
+        console.log(`🐢 Cache MISS: ${cacheKey} – fetching live`);
+        rawData = await metrolinx.getScheduleStopDateLineDirection(date, line, direction);
+        cache[cacheKey] = { data: rawData };
+      }
+    }
+
+    return res.json(rawData);
+
+  } catch (err) {
+    console.error("Stop-Date-line-direction error:", err.message);
+    res.status(500).json({ error: err.message });
+  }
+});
 
 router.get("/date-line-direction", async (req, res) => {
   try {
@@ -200,13 +243,9 @@ router.get("/date-line-direction", async (req, res) => {
 
     // Log environment info (Toronto time)
     const nowTorontoStr = new Date().toLocaleString("en-US", { timeZone: "America/Toronto" });
-    console.log(`[DEBUG] Toronto time: ${nowTorontoStr}`);
-    console.log(`[DEBUG] Requested date: ${date}, todayStr: ${todayStr}, isToday: ${isToday}`);
 
     if (isToday) {
-      console.log(`🟢 Today’s date (${date}) – fetching live (cache bypassed)`);
       rawData = await metrolinx.getScheduleDateLineDirection(date, line, direction);
-      // Optionally store raw data in cache for other uses, but do not rely on it for today's filtering
       cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     } else {
       if (cache[cacheKey]?.data) {
@@ -226,13 +265,13 @@ router.get("/date-line-direction", async (req, res) => {
       const lineObj = Array.isArray(rawLines) ? rawLines[0] : rawLines;
       rawTripCount = lineObj.Trip?.length || 0;
     }
-    console.log(`[DEBUG] Raw trips from metrolinx: ${rawTripCount}`);
+    //console.log(`[DEBUG] Raw trips from metrolinx: ${rawTripCount}`);
 
     // Apply time filter only for today
     let filteredData = rawData;
     if (isToday) {
       const currentSeconds = getCurrentESTSeconds();
-      console.log(`[DEBUG] Current Toronto seconds since midnight: ${currentSeconds}`);
+      //console.log(`[DEBUG] Current Toronto seconds since midnight: ${currentSeconds}`);
 
       const timeToSeconds = (timeStr) => {
         let timePart = timeStr;

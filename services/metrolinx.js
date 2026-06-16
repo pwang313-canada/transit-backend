@@ -55,6 +55,13 @@ async function getScheduleDateLineDirection(date, line, direction) {
     return res.data;
 }
 
+async function getScheduleStopDateLineDirection(date, line, direction) {
+    const url = `${BASE_URL}/Schedule/Line/Stop/${date}/${line}/${direction}?key=${API_KEY}`;
+    console.log("URL:", url);
+    const res = await axios.get(url);
+    return res.data;
+}
+
 async function getScheduleDateTrip(date, trip) {
     const url = `${BASE_URL}/Schedule/Trip/${date}/${trip}?key=${API_KEY}`;
     const res = await axios.get(url);
@@ -110,6 +117,7 @@ module.exports = {
     getScheduleTripOnDate,
     getScheduleAllLine,
     getScheduleDateLineDirection,
+    getScheduleStopDateLineDirection,
     getScheduleDateTrip,
     getVehicles,
     getFeedAlerts,
