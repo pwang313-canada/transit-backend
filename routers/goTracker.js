@@ -45,6 +45,7 @@ router.get("/platform", async (req, res) => {
         time: toLocalTimeHMS(trip.time),
         platform: trip.platform,
         service: serviceToCode(trip.service),   // ✅ now returns "LW", "LE", etc.
+        status: trip.info.split('/')[0].trim(),
       }));
 
     res.json({
