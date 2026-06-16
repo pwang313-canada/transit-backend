@@ -164,7 +164,7 @@ router.get("/all-line", async (req, res) => {
   }
 });
 
-router.get("/stop-date-line-direction", async (req, res) => {
+router.get("/date-stops", async (req, res) => {
   try {
 
     const date = req.query.date || getToday();
@@ -186,7 +186,7 @@ router.get("/stop-date-line-direction", async (req, res) => {
 
     if (isToday) {
       //console.log(`🟢 Today’s date (${date}) – fetching live (cache bypassed)`);
-      rawData = await metrolinx.getScheduleStopDateLineDirection(date, line, direction);
+      rawData = await metrolinx.getScheduleDateStops(date, line, direction);
       // Optionally store raw data in cache for other uses, but do not rely on it for today's filtering
       cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     } else {
@@ -195,7 +195,7 @@ router.get("/stop-date-line-direction", async (req, res) => {
         rawData = cache[cacheKey].data;
       } else {
         console.log(`🐢 Cache MISS: ${cacheKey} – fetching live`);
-        rawData = await metrolinx.getScheduleStopDateLineDirection(date, line, direction);
+        rawData = await metrolinx.getScheduleDateStops(date, line, direction);
         cache[cacheKey] = { data: rawData };
       }
     }
