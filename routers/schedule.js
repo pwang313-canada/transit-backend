@@ -166,7 +166,6 @@ router.get("/all-line", async (req, res) => {
 
 router.get("/date-stops", async (req, res) => {
   try {
-
     const date = req.query.date || getToday();
     const { line, direction } = req.query;
 
@@ -184,10 +183,23 @@ router.get("/date-stops", async (req, res) => {
     const cacheKey = `stop_${date}_${line}_${direction}`;
     let rawData;
 
+    // Determine if the requested date is in the future (for logging/consistency)
+    const targetDate = new Date(
+      parseInt(date.slice(0,4)),
+      parseInt(date.slice(4,6)) - 1,
+      parseInt(date.slice(6,8))
+    );
+    const todayDate = new Date(
+      parseInt(todayStr.slice(0,4)),
+      parseInt(todayStr.slice(4,6)) - 1,
+      parseInt(todayStr.slice(6,8))
+    );
+    const isFuture = targetDate > todayDate;
+
+    // For today, always fetch live; for other dates, use cache if available.
     if (isToday) {
       //console.log(`🟢 Today’s date (${date}) – fetching live (cache bypassed)`);
       rawData = await metrolinx.getScheduleDateStops(date, line, direction);
-      // Optionally store raw data in cache for other uses, but do not rely on it for today's filtering
       cache[cacheKey] = { data: rawData, timestamp: Date.now() };
     } else {
       if (cache[cacheKey]?.data) {
@@ -200,8 +212,9 @@ router.get("/date-stops", async (req, res) => {
       }
     }
 
+    // No time filtering applied – we return all stops for the requested date.
+    // For future dates, this returns the full stop list (same as today).
     return res.json(rawData);
-
   } catch (err) {
     console.error("Stop-Date-line-direction error:", err.message);
     res.status(500).json({ error: err.message });
@@ -210,15 +223,15 @@ router.get("/date-stops", async (req, res) => {
 
 router.get("/date-line-direction", async (req, res) => {
   try {
-    const dateParam = req.query.date;
-    const { line, direction } = req.query;
+    const { date, line, direction } = req.query;
     const maxTrips = parseInt(req.query.maxTrips, 20) || 20;
 
     const cache = req.cache || global.cache;
     if (!cache) return res.status(500).json({ error: "Cache not initialized" });
     if (!line || !direction) return res.status(400).json({ error: "Missing line or direction" });
 
-    const targetDateStr = dateParam || new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" }).replace(/-/g, "");
+    // Determine target date (default: today in Toronto)
+    const targetDateStr = date || new Date().toLocaleDateString("en-CA", { timeZone: "America/Toronto" }).replace(/-/g, "");
     const cacheKey = `trip_${targetDateStr}_${line}_${direction}`;
     let rawData;
 
@@ -234,23 +247,28 @@ router.get("/date-line-direction", async (req, res) => {
     const filteredData = JSON.parse(JSON.stringify(rawData));
     const lines = filteredData.Lines?.Line;
 
-    // Helper to convert a time string (HH:MM:SS or full datetime) to seconds since midnight
-    const timeToSeconds = (timeStr) => {
-      let timePart = timeStr;
-      if (timeStr.includes(' ')) timePart = timeStr.split(' ')[1];
-      const parts = timePart.split(':');
-      if (parts.length < 2) return 0;
-      const hours = parseInt(parts[0], 10);
-      const minutes = parseInt(parts[1], 10);
-      const seconds = parts.length > 2 ? parseInt(parts[2], 10) : 0;
-      if (hours === 24) return 86400;
-      return hours * 3600 + minutes * 60 + seconds;
+    // Helper: parse "YYYY-MM-DD HH:MM:SS" into Date (UTC)
+    const parseDateTime = (str) => {
+      if (!str) return null;
+      const [datePart, timePart] = str.split(' ');
+      const [year, month, day] = datePart.split('-').map(Number);
+      const [hour, minute, second] = timePart.split(':').map(Number);
+      return new Date(Date.UTC(year, month - 1, day, hour, minute, second));
     };
 
-    // Get current time in seconds since midnight (Toronto time)
+    // Determine if the requested date is in the future (compared to today in Toronto)
+    const todayToronto = new Date(new Date().toLocaleString("en-US", { timeZone: "America/Toronto" }));
+    todayToronto.setHours(0, 0, 0, 0);
+    const targetDate = new Date(
+      parseInt(targetDateStr.slice(0,4)),
+      parseInt(targetDateStr.slice(4,6)) - 1,
+      parseInt(targetDateStr.slice(6,8))
+    );
+    const isFuture = targetDate > todayToronto;
+
+    // Current Toronto time in UTC ms (only needed for non‑future dates)
     const nowToronto = new Date().toLocaleString("en-US", { timeZone: "America/Toronto" });
-    const nowDate = new Date(nowToronto);
-    const currentSeconds = nowDate.getHours() * 3600 + nowDate.getMinutes() * 60 + nowDate.getSeconds();
+    const nowUtc = new Date(nowToronto).getTime();
 
     if (lines && lines.length > 0) {
       for (const lineObj of lines) {
@@ -262,29 +280,30 @@ router.get("/date-line-direction", async (req, res) => {
             const stops = trip.Stops;
             if (!stops || stops.length === 0) continue;
 
-            // Get the last stop's time
-            const lastStop = stops[stops.length - 1];
-            if (!lastStop || !lastStop.Time) continue;
-
-            const lastSeconds = timeToSeconds(lastStop.Time);
-            // Keep trip only if the last stop is in the future (not yet completed)
-            if (lastSeconds > currentSeconds) {
-              keptTrips.push(trip);
-            } else {
-              console.log(`⏱️ Discard trip ${trip.Number} (last stop ${lastStop.Code} at ${lastStop.Time}) – already passed`);
+            if (!isFuture) {
+              // For today/past: keep only if last stop is still in the future
+              const lastStop = stops[stops.length - 1];
+              if (!lastStop?.Time) continue;
+              const lastTime = parseDateTime(lastStop.Time);
+              if (!lastTime) continue;
+              if (lastTime.getTime() <= nowUtc) {
+                console.log(`⏱️ Discard trip ${trip.Number} (last stop ${lastStop.Code} at ${lastStop.Time}) – already passed`);
+                continue;
+              }
             }
+            // For future dates: keep all trips
+            keptTrips.push(trip);
           }
 
-          // Sort trips by first stop time (ascending)
+          // Sort remaining trips by first stop time (ascending)
           keptTrips.sort((a, b) => {
-            const timeA = timeToSeconds(a.Stops[0]?.Time || '00:00:00');
-            const timeB = timeToSeconds(b.Stops[0]?.Time || '00:00:00');
-            return timeA - timeB;
+            const ta = parseDateTime(a.Stops[0]?.Time);
+            const tb = parseDateTime(b.Stops[0]?.Time);
+            return (ta?.getTime() || 0) - (tb?.getTime() || 0);
           });
 
-          // Limit to maxTrips
           lineObj.Trip = keptTrips.slice(0, maxTrips);
-          console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (keep trips with last stop > now)`);
+          console.log(`⏰ Filtered ${lineObj.Code}: ${originalCount} → ${lineObj.Trip.length} trips (future? ${isFuture})`);
         }
       }
     }
